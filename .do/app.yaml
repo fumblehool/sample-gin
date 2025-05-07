@@ -1,6 +1,6 @@
-name: sample-golang
+name: sample-gin
 services:
 - name: web
   github:
-    repo: digitalocean/sample-golang
+    repo: digitalocean/sample-gin
     branch: main
