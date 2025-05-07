@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gofrs/uuid"
 )
 
@@ -27,80 +28,94 @@ const startupMessage = `[48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m
 [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;128;255;255m[38;2;0;0;0m▄[48;2;16;230;242m[38;2;0;0;0m▄[48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;222;235;235m[38;2;0;0;0m▄[48;2;222;235;235m[38;2;0;0;0m▄[48;2;222;235;235m[38;2;255;255;255m▄[48;2;222;235;235m[38;2;228;228;228m▄[48;2;222;235;235m[38;2;223;236;236m▄[48;2;222;235;235m[38;2;221;234;234m▄[48;2;222;235;235m [48;2;222;235;235m[38;2;223;235;235m▄[48;2;222;235;235m[38;2;223;235;235m▄[48;2;222;235;235m[38;2;219;237;237m▄[48;2;222;235;235m[38;2;255;255;255m▄[48;2;222;235;235m[38;2;0;0;0m▄[48;2;222;236;236m[38;2;0;0;0m▄[48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [48;2;0;0;0m [0m
 `
 
-func logRequest(r *http.Request) {
-	uri := r.RequestURI
-	method := r.Method
+func logRequest(c *gin.Context) {
+	uri := c.Request.RequestURI
+	method := c.Request.Method
 	fmt.Println("Got request!", method, uri)
 }
 
-func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		logRequest(r)
-		fmt.Fprintf(w, "Hello! you've requested %s\n", r.URL.Path)
+func setupRouter() *gin.Engine {
+	r := gin.Default()
+
+	r.GET("/ping", func(c *gin.Context) {
+		logRequest(c)
+		c.String(http.StatusOK, "pong")
 	})
 
-	http.HandleFunc("/cached", func(w http.ResponseWriter, r *http.Request) {
-		logRequest(r)
-		maxAgeParams, ok := r.URL.Query()["max-age"]
+	r.GET("/", func(c *gin.Context) {
+		logRequest(c)
+		returnStr := fmt.Sprintf("Hello! you've requested %s\n", c.Request.URL.Path)
+		c.String(http.StatusOK, returnStr)
+	})
+
+	r.GET("/cached", func(c *gin.Context) {
+		logRequest(c)
+		maxAgeParams, ok := c.Request.URL.Query()["max-age"]
 		if ok && len(maxAgeParams) > 0 {
 			maxAge, _ := strconv.Atoi(maxAgeParams[0])
-			w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d", maxAge))
+			c.Header("Cache-Control", fmt.Sprintf("max-age=%d", maxAge))
 		}
-		responseHeaderParams, ok := r.URL.Query()["headers"]
+		responseHeaderParams, ok := c.Request.URL.Query()["headers"]
 		if ok {
 			for _, header := range responseHeaderParams {
 				h := strings.Split(header, ":")
-				w.Header().Set(h[0], strings.TrimSpace(h[1]))
+				c.Header(h[0], strings.TrimSpace(h[1]))
 			}
 		}
-		statusCodeParams, ok := r.URL.Query()["status"]
+		statusCodeParams, ok := c.Request.URL.Query()["status"]
 		if ok {
 			statusCode, _ := strconv.Atoi(statusCodeParams[0])
-			w.WriteHeader(statusCode)
+			c.Status(statusCode)
 		}
 		requestID := uuid.Must(uuid.NewV4())
-		fmt.Fprint(w, requestID.String())
+		c.String(http.StatusOK, requestID.String())
 	})
 
-	http.HandleFunc("/headers", func(w http.ResponseWriter, r *http.Request) {
-		logRequest(r)
-		keys, ok := r.URL.Query()["key"]
+	r.GET("/headers", func(c *gin.Context) {
+		logRequest(c)
+		keys, ok := c.Request.URL.Query()["key"]
 		if ok && len(keys) > 0 {
-			fmt.Fprint(w, r.Header.Get(keys[0]))
+			c.String(http.StatusOK, c.Request.Header.Get(keys[0]))
 			return
 		}
 		headers := []string{}
-		headers = append(headers, fmt.Sprintf("host=%s", r.Host))
-		for key, values := range r.Header {
+		headers = append(headers, fmt.Sprintf("host=%s", c.Request.Host))
+		for key, values := range c.Request.Header {
 			headers = append(headers, fmt.Sprintf("%s=%s", key, strings.Join(values, ",")))
 		}
-		fmt.Fprint(w, strings.Join(headers, "\n"))
+		c.String(http.StatusOK, strings.Join(headers, "\n"))
 	})
 
-	http.HandleFunc("/env", func(w http.ResponseWriter, r *http.Request) {
-		logRequest(r)
-		keys, ok := r.URL.Query()["key"]
+	r.GET("/env", func(c *gin.Context) {
+		logRequest(c)
+		keys, ok := c.Request.URL.Query()["key"]
 		if ok && len(keys) > 0 {
-			fmt.Fprint(w, os.Getenv(keys[0]))
+			c.String(http.StatusOK, os.Getenv(keys[0]))
 			return
 		}
 		envs := []string{}
 		envs = append(envs, os.Environ()...)
-		fmt.Fprint(w, strings.Join(envs, "\n"))
+		c.String(http.StatusOK, strings.Join(envs, "\n"))
 	})
 
-	http.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
-		logRequest(r)
-		codeParams, ok := r.URL.Query()["code"]
+	r.GET("/status", func(c *gin.Context) {
+		logRequest(c)
+		codeParams, ok := c.Request.URL.Query()["code"]
 		if ok && len(codeParams) > 0 {
 			statusCode, _ := strconv.Atoi(codeParams[0])
 			if statusCode >= 200 && statusCode < 600 {
-				w.WriteHeader(statusCode)
+				c.Status(statusCode)
 			}
 		}
 		requestID := uuid.Must(uuid.NewV4())
-		fmt.Fprint(w, requestID.String())
+		c.String(http.StatusOK, requestID.String())
 	})
+
+	return r
+}
+
+func main() {
+	r := setupRouter()
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -127,7 +142,7 @@ func main() {
 	fmt.Println()
 	fmt.Printf("==> Server listening at %s 🚀\n", bindAddr)
 
-	if err := http.ListenAndServe(bindAddr, nil); err != nil {
+	if err := r.Run(bindAddr); err != nil {
 		panic(err)
 	}
 }
